@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+
+# Local/editor files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Large reference material kept out of the project repo
+*.pdf
