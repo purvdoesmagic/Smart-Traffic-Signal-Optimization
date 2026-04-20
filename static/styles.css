@@ -367,12 +367,6 @@ button:focus-visible {
     text-transform: uppercase;
 }
 
-.intensity-low {
-    background: rgba(0, 208, 138, 0.2);
-    border-color: #00d08a;
-    color: #6effca;
-}
-
 .intensity-medium {
     background: rgba(255, 216, 77, 0.2);
     border-color: #ffd84d;
@@ -423,22 +417,6 @@ button:focus-visible {
     color: #d8f8ff;
     font-size: 0.9em;
     padding: 8px;
-}
-
-.info-box {
-    background: rgba(0, 0, 0, 0.4);
-    border-left: 3px solid #00ffff;
-    border-radius: 6px;
-    color: #aaffff;
-    font-size: 0.9em;
-    line-height: 1.6;
-    padding: 10px;
-}
-
-.summary-line {
-    color: #d8f8ff;
-    font-size: 0.95em;
-    line-height: 1.6;
 }
 
 .about-grid {

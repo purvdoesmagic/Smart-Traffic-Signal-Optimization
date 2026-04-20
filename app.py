@@ -160,7 +160,6 @@ class Sim:
             self.cars = [car for car in self.cars if car["progress"] < EXIT_PROGRESS]
 
     def choose_spawn_road(self):
-        config = MODE_SPAWN_CONFIG[self.mode]
         candidates = [road for road in self.roads if self.waiting_count(road) < self.queue_cap_for_road(road)]
         if not candidates:
             return None
