@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *.log
+.sixth/
 
 # Local/editor files
 .idea/

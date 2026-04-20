@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Traffic Optimization</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>SMART TRAFFIC SIGNAL OPTIMIZATION</h1>
+    </header>
+    <div class="main">
+        <div class="canvas-container">
+            <canvas id="c"></canvas>
+            <div class="controls">
+                <button class="start" id="s" onclick="start()">START</button>
+                <button class="stop" id="t" onclick="stop()" disabled>STOP</button>
+                <button class="reset" id="r" onclick="reset()">RESET</button>
+            </div>
+        </div>
+        <div class="sidebar">
+            <div class="panel">
+                <h2>LIVE STATUS</h2>
+                <div class="stat-grid">
+                    <div class="stat compact"><div class="label">Current Phase</div><div class="value yellow" id="phase">-</div></div>
+                    <div class="stat compact"><div class="label">Signal Countdown</div><div class="value yellow" id="sig">-s</div></div>
+                    <div class="stat compact"><div class="label">Queue Length</div><div class="value" id="cars">0</div></div>
+                    <div class="stat compact"><div class="label">Cars Passed</div><div class="value" id="pass">0</div></div>
+                    <div class="stat compact wide-stat">
+                        <div class="label">Green Roads</div>
+                        <div class="status-pill" id="green-roads">-</div>
+                        <div class="label label-gap">Red Roads</div>
+                        <div class="status-pill red-pill" id="red-roads">-</div>
+                        <div class="countdown-track"><div class="countdown-fill" id="phase-fill"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>PERFORMANCE</h2>
+                <div class="perf-rating" id="perf-rating">-</div>
+                <div class="stat-grid">
+                    <div class="stat compact"><div class="label">Efficiency Score</div><div class="value yellow" id="eff">0%</div></div>
+                    <div class="stat compact"><div class="label">Throughput</div><div class="value" id="throughput">0</div></div>
+                    <div class="stat compact wide-stat"><div class="label">Average Waiting Time</div><div class="value" id="avg-wait">0s</div></div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>LIVE TRENDS</h2>
+                <div class="trend-wrap">
+                    <canvas id="trend-chart"></canvas>
+                </div>
+                <div class="trend-legend">
+                    <span class="legend-item"><span class="legend-dot queue-dot"></span>Queue</span>
+                    <span class="legend-item"><span class="legend-dot flow-dot"></span>Throughput</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>SIMULATION MODE</h2>
+                <div class="mode-grid" id="mode-controls"></div>
+                <div class="priority-status" id="mode-status">Mode: Normal Traffic</div>
+                <div class="mode-intensity-row">
+                    <span class="label">Mode Intensity</span>
+                    <span class="mode-intensity-badge intensity-medium" id="mode-intensity">Medium</span>
+                </div>
+                <div class="label label-gap">Scenario Presets</div>
+                <div class="mode-grid" id="scenario-controls"></div>
+                <div class="scenario-status" id="scenario-status">Pick a preset to simulate a real-world traffic pattern.</div>
+            </div>
+
+            <div class="panel">
+                <h2>ROAD-WISE TRAFFIC</h2>
+                <div class="road-status" id="road-status"></div>
+            </div>
+
+            <div class="panel">
+                <h2>TRAFFIC CONTROLS</h2>
+                <div class="label">Emergency Priority</div>
+                <div class="mini-grid">
+                    <button class="mini-btn" data-priority="North">North Priority</button>
+                    <button class="mini-btn" data-priority="South">South Priority</button>
+                    <button class="mini-btn" data-priority="East">East Priority</button>
+                    <button class="mini-btn" data-priority="West">West Priority</button>
+                </div>
+                <div class="priority-status" id="priority-status">No priority active</div>
+                <div class="label label-gap">Manual Density</div>
+                <div id="density-controls"></div>
+            </div>
+
+            <div class="panel">
+                <h2>GRAPH MODEL</h2>
+                <div class="graph-canvas-wrap">
+                    <canvas id="graph-canvas"></canvas>
+                </div>
+                <div class="graph-list">
+                    <div class="graph-line" id="phase-groups">Phases: -</div>
+                    <div class="graph-line" id="conflict-edges">Conflict edges: -</div>
+                    <div class="graph-line" id="phase-explanation">Current phase explanation: -</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>ABOUT & GUIDE</h2>
+                <div class="about-grid">
+                    <div class="about-item">
+                        <div class="about-title">1. Quick Start</div>
+                        <div class="about-text">Use this flow for a complete run:</div>
+                        <ul class="about-points">
+                            <li>Press <strong>START</strong> to begin traffic movement and signal rotation.</li>
+                            <li>Press <strong>STOP</strong> to pause while preserving current state.</li>
+                            <li>Press <strong>RESET</strong> to clear traffic and restart from a clean state.</li>
+                        </ul>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">2. Simulation Modes</div>
+                        <ul class="about-points">
+                            <li><strong>Normal Traffic:</strong> stable everyday pattern with moderate load.</li>
+                            <li><strong>Balanced Traffic:</strong> similar demand on all four roads.</li>
+                            <li><strong>Heavy Traffic:</strong> high inflow and longer queues.</li>
+                            <li><strong>Random Traffic:</strong> continuously varying demand.</li>
+                        </ul>
+                        <div class="about-note">Mode Intensity summarizes expected pressure level.</div>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">3. Scenario Presets</div>
+                        <ul class="about-points">
+                            <li><strong>Peak Hour:</strong> office-time surge with strong directional demand.</li>
+                            <li><strong>School Exit:</strong> short controlled burst around one time window.</li>
+                            <li><strong>Event Dispersal:</strong> one random road gets higher focus each run while others continue moving with lower load.</li>
+                        </ul>
+                        <div class="about-note">Presets automatically apply a mode and road-wise density profile.</div>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">4. Traffic Controls</div>
+                        <ul class="about-points">
+                            <li><strong>Emergency Priority:</strong> temporarily prioritizes one road when urgent flow is needed.</li>
+                            <li><strong>Manual Density +/-:</strong> increase or decrease incoming demand per road in real time.</li>
+                        </ul>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">5. Live Status Metrics</div>
+                        <ul class="about-points">
+                            <li><strong>Current Phase:</strong> active signal phase selected by graph-coloring logic.</li>
+                            <li><strong>Signal Countdown:</strong> remaining time before next phase switch.</li>
+                            <li><strong>Queue Length:</strong> total waiting vehicles across roads.</li>
+                            <li><strong>Cars Passed:</strong> cumulative successful crossings.</li>
+                            <li><strong>Green Roads / Red Roads:</strong> currently allowed and blocked directions.</li>
+                        </ul>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">6. Performance Metrics</div>
+                        <ul class="about-points">
+                            <li><strong>Efficiency Rating:</strong> qualitative result from system throughput behavior.</li>
+                            <li><strong>Efficiency Score:</strong> numeric score for easier comparison.</li>
+                            <li><strong>Throughput:</strong> vehicles passing per minute.</li>
+                            <li><strong>Average Waiting Time:</strong> average delay before movement starts.</li>
+                            <li><strong>Live Trends:</strong> queue and throughput history over time.</li>
+                        </ul>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">7. Road-wise Traffic Card</div>
+                        <ul class="about-points">
+                            <li>Shows per-road <strong>Queue</strong>, <strong>Density</strong>, and current signal color state.</li>
+                            <li>Useful for verifying if manual controls and scenarios are behaving correctly.</li>
+                        </ul>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">8. Graph Model (Discrete Maths Core)</div>
+                        <ul class="about-points">
+                            <li>Each direction (North, South, East, West) is treated as a <strong>vertex</strong>.</li>
+                            <li>Unsafe simultaneous pairs are modeled as <strong>conflict edges</strong>.</li>
+                            <li><strong>Graph coloring</strong> groups non-conflicting vertices into safe phases.</li>
+                            <li>The active colored group is turned green together to avoid collisions.</li>
+                        </ul>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-title">9. Applications of Discrete Mathematics Used</div>
+                        <ul class="about-points">
+                            <li><strong>Set Representation:</strong> roads, cars, active roads, inactive roads, and conflict pairs are modeled as finite sets.</li>
+                            <li><strong>Set Partitioning:</strong> each signal phase partitions directions into two disjoint sets: green (allowed) and red (blocked).</li>
+                            <li><strong>Binary Relations:</strong> conflict relation defines which two roads cannot be green together at the same time.</li>
+                            <li><strong>Graph Theory:</strong> the junction is represented as a graph where roads are vertices and conflicts are edges.</li>
+                            <li><strong>Subgraph Reasoning:</strong> currently active roads form a conflict-free subset (independent set behavior).</li>
+                        </ul>
+                        <div class="about-more" id="dm-more">
+                            <ul class="about-points about-points-more">
+                                <li><strong>Graph Coloring:</strong> colors represent safe phases; roads with the same color can move simultaneously.</li>
+                                <li><strong>Chromatic Insight:</strong> minimum required phase groups are derived from graph conflicts.</li>
+                                <li><strong>Functions and Mapping:</strong> mode/scenario selection maps to density values and spawn configurations.</li>
+                                <li><strong>Function Composition:</strong> scenario + mode + manual density updates combine to produce final traffic behavior.</li>
+                                <li><strong>Finite State Machine:</strong> the controller transitions through phase states with deterministic timing rules.</li>
+                                <li><strong>Discrete Time Steps:</strong> simulation updates in fixed ticks, making movement and decisions discrete.</li>
+                                <li><strong>Propositional Logic:</strong> if-then rule checks drive decisions (priority, conflicts, waiting, switching).</li>
+                                <li><strong>Constraint Satisfaction:</strong> safety constraints prevent invalid signal combinations that could cause collisions.</li>
+                                <li><strong>Combinatorics (Counting):</strong> queue length, cars passed, and road-wise waiting counts are discrete cardinalities.</li>
+                                <li><strong>Discrete Optimization:</strong> throughput maximization and waiting-time reduction guide signal effectiveness.</li>
+                                <li><strong>Weighted Random Choice:</strong> probabilistic spawning uses density-based weights to model realistic arrivals.</li>
+                                <li><strong>Case-Based Discrete Modeling:</strong> Peak Hour, School Exit, and Event Dispersal encode real situations as finite rule sets.</li>
+                            </ul>
+                        </div>
+                        <button class="about-toggle-btn" data-about-toggle="dm-more" data-open-label="View Less" data-closed-label="View More">View More</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

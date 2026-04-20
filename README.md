@@ -10,8 +10,21 @@ A Flask-based traffic signal simulation that applies graph coloring from Discret
 - Visible vehicle queues at red signals
 - Cars already moving continue clearing the road after a signal change
 - Road-wise queue and density display
-- Live metrics for cars passed, throughput, and efficiency
+- Simulation modes: normal, heavy, random, balanced
+- Emergency road priority controls
+- Manual density controls for each road
+- Graph model panel with conflict edges and phase groups
+- Phase explanation based on graph-coloring logic
+- Live metrics for cars passed, throughput, efficiency, and average waiting time
 - Start, stop, and reset controls
+
+## Project Structure
+
+- `app.py`: Flask app and simulation backend
+- `templates/index.html`: main web page
+- `static/styles.css`: UI styles
+- `static/app.js`: canvas rendering and client logic
+- `IA2_DM.py`: lightweight launcher for local runs
 
 ## Discrete Mathematics Concept
 
@@ -38,16 +51,4 @@ python IA2_DM.py
 
 ```text
 http://127.0.0.1:5000
-```
-
-On Windows, you can also run:
-
-```powershell
-.\run_localhost.ps1
-```
-
-or:
-
-```bat
-run_localhost.bat
 ```
