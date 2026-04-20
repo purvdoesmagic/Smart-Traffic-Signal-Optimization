@@ -67,11 +67,15 @@ class Sim:
     def reset(self, mode=None):
         if mode in MODES:
             self.mode = mode
+        # Discrete Maths (Set): finite set of traffic directions.
         self.roads = ["North", "South", "East", "West"]
+        # Discrete Maths (Binary Relation): conflict relation between road pairs.
         self.conflicts = [("North", "East"), ("North", "West"), ("South", "East"), ("South", "West")]
+        # Discrete Maths (Graph Theory): roads -> vertices, conflicts -> edges.
         graph = nx.Graph()
         graph.add_nodes_from(self.roads)
         graph.add_edges_from(self.conflicts)
+        # Discrete Maths (Graph Coloring): group non-conflicting roads into safe phases.
         coloring = nx.coloring.greedy_color(graph)
         self.phases = {}
         for road, color in coloring.items():
@@ -136,6 +140,7 @@ class Sim:
             active_roads = self.phases[current_phase]
             delay = 3 + max(self.density[road] for road in active_roads)
 
+            # Discrete Maths (Finite State Transition): move to next phase state after delay.
             if time.time() - self.last_switch > delay:
                 self.current_phase_index = (self.current_phase_index + 1) % len(self.phase_keys)
                 self.last_switch = time.time()
@@ -171,9 +176,11 @@ class Sim:
             elif self.active_scenario == "event_dispersal":
                 weight *= 0.45
             weights.append(weight)
+        # Discrete Maths (Weighted Probability): density-weighted random choice of incoming road.
         return random.choices(candidates, weights=weights, k=1)[0]
 
     def waiting_count(self, road):
+        # Discrete Maths (Counting/Cardinality): number of waiting cars on a road.
         return sum(1 for car in self.cars if car["road"] == road and is_waiting(car))
 
     def queue_cap_for_road(self, road):
@@ -211,6 +218,7 @@ class Sim:
         with self.lock:
             current_phase = self.phase_keys[self.current_phase_index]
             active_roads = list(self.phases[current_phase])
+            # Discrete Maths (Set Partition): roads split into active and inactive sets.
             inactive_roads = [road for road in self.roads if road not in active_roads]
             delay = 3 + max(self.density[road] for road in active_roads)
             if self.running:
@@ -236,8 +244,10 @@ class Sim:
                 efficiency = "Poor"
                 efficiency_score = 20
 
+            # Discrete Maths (Counting): total queued cars across all roads.
             queue_length = sum(1 for car in self.cars if is_waiting(car))
             queue_by_road = {
+                # Discrete Maths (Counting by subset): queued cars per road.
                 road: sum(1 for car in self.cars if car["road"] == road and is_waiting(car))
                 for road in self.roads
             }
