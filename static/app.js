@@ -9,6 +9,7 @@ let state = {};
 const roads = ["North", "South", "East", "West"];
 const history = { queue: [], throughput: [] };
 const MAX_HISTORY = 120;
+const STATE_POLL_MS = 400;
 let chartTick = 0;
 let sceneWidth = 0;
 let sceneHeight = 0;
@@ -18,6 +19,7 @@ let graphDpr = 1;
 let modeControlsKey = "";
 let densityControlsKey = "";
 let scenarioControlsKey = "";
+let stateRequestInFlight = false;
 
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
@@ -395,12 +397,18 @@ function renderModeIntensity() {
 }
 
 async function update() {
-    try {
-        const res = await fetch("/api/state");
-        state = await res.json();
-    } catch {
+    if (stateRequestInFlight) {
         return;
     }
+    stateRequestInFlight = true;
+    try {
+        const res = await fetch("/api/state", { cache: "no-store" });
+        state = await res.json();
+    } catch {
+        stateRequestInFlight = false;
+        return;
+    }
+    stateRequestInFlight = false;
 
     setText("phase", state.current_phase || "-");
     setText("sig", `${state.remaining_time ?? "-"}s`);
@@ -496,5 +504,5 @@ window.addEventListener("resize", () => {
 });
 
 resizeCanvas();
-setInterval(update, 100);
+setInterval(update, STATE_POLL_MS);
 update();
