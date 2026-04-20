@@ -7,6 +7,10 @@ A Flask-based web simulation of a four-way traffic junction that applies Discret
 This project models a junction with roads `North`, `South`, `East`, and `West`.  
 Unsafe simultaneous movements are represented as graph conflicts, and graph coloring is used to schedule safe green phases.
 
+## Live Demo
+
+https://smart-traffic-signal-optimization.vercel.app/
+
 The app includes:
 
 - Real-time vehicle simulation on canvas
