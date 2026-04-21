@@ -418,6 +418,11 @@ def get_state():
     return jsonify(sim.get_state())
 
 
+@app.route("/healthz")
+def healthz():
+    return jsonify({"ok": True})
+
+
 @app.route("/api/start")
 def start():
     sim.start()

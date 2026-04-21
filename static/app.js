@@ -9,7 +9,8 @@ let state = {};
 const roads = ["North", "South", "East", "West"];
 const history = { queue: [], throughput: [] };
 const MAX_HISTORY = 120;
-const STATE_POLL_MS = 400;
+const ACTIVE_POLL_MS = 700;
+const IDLE_POLL_MS = 2500;
 let chartTick = 0;
 let sceneWidth = 0;
 let sceneHeight = 0;
@@ -20,6 +21,8 @@ let modeControlsKey = "";
 let densityControlsKey = "";
 let scenarioControlsKey = "";
 let stateRequestInFlight = false;
+let pollingStarted = false;
+let drewIdleScene = false;
 
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
@@ -436,18 +439,31 @@ async function update() {
     renderDensityControls();
     renderScenarioButtons();
     renderGraphDetails();
-    drawGraphModel();
     renderPerformance();
     renderModeIntensity();
-    chartTick += 1;
-    if (chartTick % 4 === 0) {
-        history.queue.push(state.queue_length ?? 0);
-        history.throughput.push(state.throughput ?? 0);
-        if (history.queue.length > MAX_HISTORY) history.queue.shift();
-        if (history.throughput.length > MAX_HISTORY) history.throughput.shift();
+
+    const hasCars = (state.cars || []).length > 0;
+    const activeAnimation = state.running || hasCars;
+
+    if (activeAnimation) {
+        drewIdleScene = false;
+        drawGraphModel();
+        chartTick += 1;
+        if (chartTick % 3 === 0) {
+            history.queue.push(state.queue_length ?? 0);
+            history.throughput.push(state.throughput ?? 0);
+            if (history.queue.length > MAX_HISTORY) history.queue.shift();
+            if (history.throughput.length > MAX_HISTORY) history.throughput.shift();
+            drawTrendChart();
+        }
+        draw();
+    } else if (!drewIdleScene) {
+        // Draw once in idle state to avoid unnecessary heavy canvas redraw loops.
+        drawGraphModel();
         drawTrendChart();
+        draw();
+        drewIdleScene = true;
     }
-    draw();
 }
 
 async function callApi(path) {
@@ -503,6 +519,23 @@ window.addEventListener("resize", () => {
     drawGraphModel();
 });
 
+function pollDelay() {
+    if (document.hidden || !state.running) {
+        return IDLE_POLL_MS;
+    }
+    return ACTIVE_POLL_MS;
+}
+
+async function pollLoop() {
+    await update();
+    setTimeout(pollLoop, pollDelay());
+}
+
+function startPolling() {
+    if (pollingStarted) return;
+    pollingStarted = true;
+    pollLoop();
+}
+
 resizeCanvas();
-setInterval(update, STATE_POLL_MS);
-update();
+startPolling();
