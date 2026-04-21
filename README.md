@@ -9,7 +9,10 @@ Unsafe simultaneous movements are represented as graph conflicts, and graph colo
 
 ## Live Demo
 
-https://smart-traffic-signal-optimization.vercel.app/
+- Submitted demo link (Vercel):  
+  https://smart-traffic-signal-optimization.vercel.app/
+- Runtime-optimized link (Render):  
+  https://smart-traffic-signal-optimization.onrender.com
 
 The app includes:
 
@@ -95,6 +98,12 @@ This app keeps live in-memory simulation state, so a persistent web service work
 ### Vercel Note
 
 Vercel can host the project, but because this is a stateful simulation with frequent updates, performance may feel laggy compared to Render/Railway.
+
+## Performance Note
+
+- On Render Free plan, cold starts after inactivity can cause a slow first request.
+- On Vercel, serverless behavior can add latency for this stateful simulation.
+- After opening the app, wait a few seconds and refresh once for best experience.
 
 ## Author
 
