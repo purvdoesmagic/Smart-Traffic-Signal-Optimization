@@ -111,4 +111,4 @@ Vercel can host the project, but because this is a stateful simulation with freq
 
 ## Author
 
-Developed as a Discrete Mathematics mini project.
+**Purv Doshi**
