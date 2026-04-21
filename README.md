@@ -81,8 +81,20 @@ http://127.0.0.1:5000
 
 ## Deployment
 
-The project is connected to GitHub and can be deployed via Vercel.  
-Each push to `main` triggers an automatic redeploy when Git integration is enabled.
+### Recommended: Render (for smoother runtime)
+
+This app keeps live in-memory simulation state, so a persistent web service works better than serverless for performance.
+
+1. Go to Render dashboard and create a new **Web Service** from this GitHub repo.
+2. Render will detect `render.yaml` (or use these values manually):
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `gunicorn app:app --workers 1 --threads 8 --timeout 120`
+3. Deploy and open the generated Render URL.
+4. Keep **Auto Deploy** enabled so every push to `main` updates your live app.
+
+### Vercel Note
+
+Vercel can host the project, but because this is a stateful simulation with frequent updates, performance may feel laggy compared to Render/Railway.
 
 ## Author
 
