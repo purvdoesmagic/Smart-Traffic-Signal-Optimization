@@ -9,8 +9,11 @@ let state = {};
 const roads = ["North", "South", "East", "West"];
 const history = { queue: [], throughput: [] };
 const MAX_HISTORY = 120;
-const ACTIVE_POLL_MS = 700;
-const IDLE_POLL_MS = 2500;
+const IS_LOCAL_HOST =
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname === "localhost";
+const ACTIVE_POLL_MS = IS_LOCAL_HOST ? 120 : 700;
+const IDLE_POLL_MS = IS_LOCAL_HOST ? 700 : 2500;
 let chartTick = 0;
 let sceneWidth = 0;
 let sceneHeight = 0;

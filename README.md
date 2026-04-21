@@ -9,10 +9,13 @@ Unsafe simultaneous movements are represented as graph conflicts, and graph colo
 
 ## Live Demo
 
-- Submitted demo link (Vercel):  
-  https://smart-traffic-signal-optimization.vercel.app/
-- Runtime-optimized link (Render):  
-  https://smart-traffic-signal-optimization.onrender.com
+- Vercel: https://smart-traffic-signal-optimization.vercel.app/
+- Render: https://smart-traffic-signal-optimization.onrender.com
+
+## Recommended Usage
+
+For the smoothest experience, download/clone this project and run it locally.  
+Hosted free-tier deployments can have cold starts and request delays.
 
 The app includes:
 
@@ -84,9 +87,9 @@ http://127.0.0.1:5000
 
 ## Deployment
 
-### Recommended: Render (for smoother runtime)
+### Render Deployment
 
-This app keeps live in-memory simulation state, so a persistent web service works better than serverless for performance.
+This app keeps live in-memory simulation state, so a persistent web service usually performs better than serverless.
 
 1. Go to Render dashboard and create a new **Web Service** from this GitHub repo.
 2. Render will detect `render.yaml` (or use these values manually):
@@ -101,6 +104,7 @@ Vercel can host the project, but because this is a stateful simulation with freq
 
 ## Performance Note
 
+- Best experience: run locally on your machine.
 - On Render Free plan, cold starts after inactivity can cause a slow first request.
 - On Vercel, serverless behavior can add latency for this stateful simulation.
 - After opening the app, wait a few seconds and refresh once for best experience.
