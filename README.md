@@ -11,6 +11,7 @@ Unsafe simultaneous movements are represented as graph conflicts, and graph colo
 
 - Vercel: https://smart-traffic-signal-optimization.vercel.app/
 - Render: https://smart-traffic-signal-optimization.onrender.com
+- Locally: http://127.0.0.1:5000/
 
 ## Recommended Usage
 
