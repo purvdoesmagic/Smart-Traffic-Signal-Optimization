@@ -9,6 +9,10 @@ let state = {};
 const roads = ["North", "South", "East", "West"];
 const history = { queue: [], throughput: [] };
 const MAX_HISTORY = 120;
+const BACKEND_CAR_SPEED = 1.7;
+const BACKEND_TICK_SECONDS = 0.033;
+const CLIENT_SPEED_PER_SEC = BACKEND_CAR_SPEED / BACKEND_TICK_SECONDS;
+const EXIT_PROGRESS = 170;
 const IS_LOCAL_HOST =
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost";
@@ -25,7 +29,10 @@ let densityControlsKey = "";
 let scenarioControlsKey = "";
 let stateRequestInFlight = false;
 let pollingStarted = false;
+let animationStarted = false;
 let drewIdleScene = false;
+let visualCars = [];
+let lastFrameTs = 0;
 
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
@@ -249,7 +256,7 @@ function draw() {
     drawSignal(width - 24, cy, "E", activeRoads.includes("East"), -28, 0);
 
     const waitingByRoad = { North: 0, South: 0, East: 0, West: 0 };
-    (state.cars || []).forEach((car) => {
+    visualCars.forEach((car) => {
         const isWaiting = !car.passed && car.progress <= 0 && !activeRoads.includes(car.road);
         let x;
         let y;
@@ -300,6 +307,62 @@ function draw() {
             drawCar(x, y, car.color, false);
         }
     });
+}
+
+function mergeCarsFromState() {
+    const incomingCars = state.cars || [];
+    const byId = new Map(visualCars.map((car) => [car.id, car]));
+    const nextCars = [];
+
+    incomingCars.forEach((serverCar) => {
+        const current = byId.get(serverCar.id);
+        if (!current) {
+            nextCars.push({ ...serverCar });
+            return;
+        }
+        nextCars.push({
+            ...current,
+            road: serverCar.road,
+            color: serverCar.color,
+            passed: serverCar.passed,
+            // Avoid visual backward jumps when network updates arrive later.
+            progress: Math.max(current.progress, serverCar.progress),
+        });
+    });
+
+    visualCars = nextCars;
+}
+
+function advanceVisualCars(dtSeconds) {
+    const activeRoads = state.active_roads || [];
+    visualCars = visualCars
+        .map((car) => {
+            const shouldMove = activeRoads.includes(car.road) || car.progress > 0;
+            if (!shouldMove) return car;
+            const nextProgress = Math.min(EXIT_PROGRESS + 1, car.progress + CLIENT_SPEED_PER_SEC * dtSeconds);
+            return { ...car, progress: nextProgress };
+        })
+        .filter((car) => car.progress < EXIT_PROGRESS);
+}
+
+function animationLoop(ts) {
+    if (!lastFrameTs) lastFrameTs = ts;
+    const dt = Math.min(0.05, (ts - lastFrameTs) / 1000);
+    lastFrameTs = ts;
+
+    const hasCars = visualCars.length > 0;
+    const activeAnimation = state.running || hasCars;
+
+    if (activeAnimation) {
+        drewIdleScene = false;
+        advanceVisualCars(dt);
+        draw();
+    } else if (!drewIdleScene) {
+        draw();
+        drewIdleScene = true;
+    }
+
+    requestAnimationFrame(animationLoop);
 }
 
 function setText(id, value) {
@@ -415,6 +478,7 @@ async function update() {
         return;
     }
     stateRequestInFlight = false;
+    mergeCarsFromState();
 
     setText("phase", state.current_phase || "-");
     setText("sig", `${state.remaining_time ?? "-"}s`);
@@ -445,11 +509,10 @@ async function update() {
     renderPerformance();
     renderModeIntensity();
 
-    const hasCars = (state.cars || []).length > 0;
+    const hasCars = visualCars.length > 0;
     const activeAnimation = state.running || hasCars;
 
     if (activeAnimation) {
-        drewIdleScene = false;
         drawGraphModel();
         chartTick += 1;
         if (chartTick % 3 === 0) {
@@ -459,13 +522,10 @@ async function update() {
             if (history.throughput.length > MAX_HISTORY) history.throughput.shift();
             drawTrendChart();
         }
-        draw();
     } else if (!drewIdleScene) {
         // Draw once in idle state to avoid unnecessary heavy canvas redraw loops.
         drawGraphModel();
         drawTrendChart();
-        draw();
-        drewIdleScene = true;
     }
 }
 
@@ -540,5 +600,12 @@ function startPolling() {
     pollLoop();
 }
 
+function startAnimation() {
+    if (animationStarted) return;
+    animationStarted = true;
+    requestAnimationFrame(animationLoop);
+}
+
 resizeCanvas();
 startPolling();
+startAnimation();
