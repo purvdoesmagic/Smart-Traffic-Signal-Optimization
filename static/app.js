@@ -13,11 +13,58 @@ const BACKEND_CAR_SPEED = 1.7;
 const BACKEND_TICK_SECONDS = 0.033;
 const CLIENT_SPEED_PER_SEC = BACKEND_CAR_SPEED / BACKEND_TICK_SECONDS;
 const EXIT_PROGRESS = 170;
+const PASS_PROGRESS = 85;
 const IS_LOCAL_HOST =
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost";
+// Use client-side simulation for both local and deployed runs for smooth, network-independent animation.
+const USE_CLIENT_SIM = true;
 const ACTIVE_POLL_MS = IS_LOCAL_HOST ? 120 : 700;
 const IDLE_POLL_MS = IS_LOCAL_HOST ? 700 : 2500;
+const CLIENT_TICK_MS = 33;
+const CLIENT_MIN_DENSITY = 1;
+const CLIENT_MAX_DENSITY = 9;
+const CLIENT_MODES = {
+    normal: "Normal Traffic",
+    heavy: "Heavy Traffic",
+    random: "Random Traffic",
+    balanced: "Balanced Traffic",
+};
+const CLIENT_MODE_INTENSITY = {
+    normal: "Medium",
+    heavy: "High",
+    random: "Variable",
+    balanced: "Medium",
+};
+const CLIENT_SCENARIOS = {
+    peak_hour: {
+        label: "Peak Hour",
+        mode: "heavy",
+        density: { North: 9, South: 8, East: 7, West: 8 },
+        description: "Office commute surge with heavy directional inflow.",
+    },
+    school_exit: {
+        label: "School Exit",
+        mode: "balanced",
+        density: { North: 6, South: 7, East: 5, West: 5 },
+        description: "Short burst around campus roads with moderate balance.",
+    },
+    event_dispersal: {
+        label: "Event Dispersal",
+        mode: "heavy",
+        density: { North: 3, South: 3, East: 3, West: 3 },
+        focus_boost: 5,
+        description: "Post-event outflow spikes on one randomly selected road.",
+    },
+};
+const CLIENT_SPAWN_CONFIG = {
+    normal: { interval: 17, minBurst: 1, maxBurst: 2, prefill: 2, queueCap: 4 },
+    balanced: { interval: 14, minBurst: 1, maxBurst: 2, prefill: 3, queueCap: 5 },
+    random: { interval: 12, minBurst: 1, maxBurst: 3, prefill: 3, queueCap: 5 },
+    heavy: { interval: 11, minBurst: 2, maxBurst: 3, prefill: 4, queueCap: 9 },
+};
+const CLIENT_COLORS = ["#FF6B9D", "#00D96F", "#FFD700", "#64C8FF", "#FF6348"];
+const CLIENT_CONFLICTS = [["North", "East"], ["North", "West"], ["South", "East"], ["South", "West"]];
 let chartTick = 0;
 let sceneWidth = 0;
 let sceneHeight = 0;
@@ -33,6 +80,365 @@ let animationStarted = false;
 let drewIdleScene = false;
 let visualCars = [];
 let lastFrameTs = 0;
+const clientSim = USE_CLIENT_SIM ? createClientSimulation() : null;
+if (clientSim) {
+    clientSim.reset("normal");
+}
+
+function clamp(value, low, high) {
+    return Math.max(low, Math.min(high, value));
+}
+
+function randomInt(low, high) {
+    return Math.floor(Math.random() * (high - low + 1)) + low;
+}
+
+function nowSec() {
+    return Date.now() / 1000;
+}
+
+function pickWeighted(candidates, weights) {
+    const total = weights.reduce((sum, w) => sum + w, 0);
+    let roll = Math.random() * total;
+    for (let i = 0; i < candidates.length; i += 1) {
+        roll -= weights[i];
+        if (roll <= 0) return candidates[i];
+    }
+    return candidates[candidates.length - 1];
+}
+
+function createClientSimulation() {
+    const sim = {
+        roads: ["North", "South", "East", "West"],
+        conflicts: CLIENT_CONFLICTS.map((pair) => [...pair]),
+        phases: { 0: ["North", "South"], 1: ["East", "West"] },
+        phaseKeys: [0, 1],
+        cars: [],
+        carsPassed: 0,
+        spawnTimer: 0,
+        mode: "normal",
+        density: {},
+        currentPhaseIndex: 0,
+        lastSwitchSec: nowSec(),
+        running: false,
+        carIdCounter: 0,
+        startTimeSec: null,
+        pausedRemainingSec: null,
+        priorityRoad: null,
+        priorityMessage: "No priority active",
+        activeScenario: null,
+        scenarioFocusRoad: null,
+        totalWaitTime: 0,
+        waitSamples: 0,
+        tickAccumulatorMs: 0,
+    };
+
+    function makeDensity(mode) {
+        if (mode === "heavy") {
+            return Object.fromEntries(sim.roads.map((road) => [road, randomInt(6, CLIENT_MAX_DENSITY)]));
+        }
+        if (mode === "random") {
+            return Object.fromEntries(sim.roads.map((road) => [road, randomInt(CLIENT_MIN_DENSITY, CLIENT_MAX_DENSITY)]));
+        }
+        if (mode === "balanced") {
+            return Object.fromEntries(sim.roads.map((road) => [road, 5]));
+        }
+        return Object.fromEntries(sim.roads.map((road) => [road, randomInt(2, 5)]));
+    }
+
+    function driftDensity() {
+        if (sim.activeScenario === "event_dispersal" && sim.scenarioFocusRoad) {
+            const updated = {};
+            sim.roads.forEach((road) => {
+                updated[road] = clamp(sim.density[road] + randomInt(-1, 1), 2, 4);
+            });
+            updated[sim.scenarioFocusRoad] = clamp(sim.density[sim.scenarioFocusRoad] + randomInt(0, 1), 7, CLIENT_MAX_DENSITY);
+            return updated;
+        }
+        if (sim.mode === "balanced") return { ...sim.density };
+        if (sim.mode === "random") return makeDensity("random");
+        const [low, high] = sim.mode === "heavy" ? [6, CLIENT_MAX_DENSITY] : [CLIENT_MIN_DENSITY, 5];
+        const updated = {};
+        sim.roads.forEach((road) => {
+            updated[road] = clamp(sim.density[road] + randomInt(-1, 1), low, high);
+        });
+        return updated;
+    }
+
+    function waitingCount(road) {
+        return sim.cars.filter((car) => car.road === road && !car.passed && car.progress <= 0).length;
+    }
+
+    function queueCapForRoad(road) {
+        const baseCap = CLIENT_SPAWN_CONFIG[sim.mode].queueCap;
+        if (sim.activeScenario === "event_dispersal" && sim.scenarioFocusRoad) {
+            if (road === sim.scenarioFocusRoad) return baseCap;
+            return Math.max(3, baseCap - 4);
+        }
+        return baseCap;
+    }
+
+    function chooseSpawnRoad() {
+        const candidates = sim.roads.filter((road) => waitingCount(road) < queueCapForRoad(road));
+        if (!candidates.length) return null;
+        const weights = candidates.map((road) => {
+            let weight = Math.max(1, sim.density[road]);
+            if (sim.activeScenario === "event_dispersal" && sim.scenarioFocusRoad === road) weight *= 3.0;
+            else if (sim.activeScenario === "event_dispersal") weight *= 0.45;
+            return weight;
+        });
+        return pickWeighted(candidates, weights);
+    }
+
+    function spawnCar(road = null) {
+        const chosenRoad = road && waitingCount(road) < queueCapForRoad(road) ? road : chooseSpawnRoad();
+        if (!chosenRoad) return;
+        sim.cars.push({
+            id: sim.carIdCounter,
+            road: chosenRoad,
+            progress: 0,
+            passed: false,
+            color: CLIENT_COLORS[randomInt(0, CLIENT_COLORS.length - 1)],
+            waiting_since: nowSec(),
+            wait_recorded: false,
+        });
+        sim.carIdCounter += 1;
+    }
+
+    function prefillModeTraffic() {
+        const count = CLIENT_SPAWN_CONFIG[sim.mode].prefill;
+        for (let i = 0; i < count; i += 1) spawnCar();
+    }
+
+    function phaseDuration() {
+        const phase = sim.phaseKeys[sim.currentPhaseIndex];
+        const activeRoads = sim.phases[phase];
+        return 3 + Math.max(...activeRoads.map((road) => sim.density[road]));
+    }
+
+    function stepTick() {
+        if (!sim.running) return;
+
+        const cfg = CLIENT_SPAWN_CONFIG[sim.mode];
+        if (sim.spawnTimer % cfg.interval === 0) {
+            const burst = randomInt(cfg.minBurst, cfg.maxBurst);
+            for (let i = 0; i < burst; i += 1) spawnCar();
+        }
+        sim.spawnTimer += 1;
+
+        let phase = sim.phaseKeys[sim.currentPhaseIndex];
+        let activeRoads = sim.phases[phase];
+        const duration = 3 + Math.max(...activeRoads.map((road) => sim.density[road]));
+
+        if (nowSec() - sim.lastSwitchSec > duration) {
+            sim.currentPhaseIndex = (sim.currentPhaseIndex + 1) % sim.phaseKeys.length;
+            sim.lastSwitchSec = nowSec();
+            sim.priorityRoad = null;
+            sim.priorityMessage = "No priority active";
+            sim.density = driftDensity();
+            phase = sim.phaseKeys[sim.currentPhaseIndex];
+            activeRoads = sim.phases[phase];
+        }
+
+        const now = nowSec();
+        sim.cars.forEach((car) => {
+            if (activeRoads.includes(car.road) || car.progress > 0) {
+                if (car.progress <= 0 && !car.wait_recorded) {
+                    sim.totalWaitTime += now - car.waiting_since;
+                    sim.waitSamples += 1;
+                    car.wait_recorded = true;
+                }
+                car.progress += BACKEND_CAR_SPEED;
+            }
+            if (!car.passed && car.progress >= PASS_PROGRESS) {
+                sim.carsPassed += 1;
+                car.passed = true;
+            }
+        });
+
+        sim.cars = sim.cars.filter((car) => car.progress < EXIT_PROGRESS);
+    }
+
+    function getStateSnapshot() {
+        const phase = sim.phaseKeys[sim.currentPhaseIndex];
+        const activeRoads = [...sim.phases[phase]];
+        const inactiveRoads = sim.roads.filter((road) => !activeRoads.includes(road));
+        const duration = phaseDuration();
+        const remaining = sim.running
+            ? Math.max(0, duration - (nowSec() - sim.lastSwitchSec))
+            : sim.pausedRemainingSec != null
+                ? sim.pausedRemainingSec
+                : duration;
+
+        let efficiency = "Poor";
+        let efficiencyScore = 20;
+        if (sim.carsPassed > 60) {
+            efficiency = "Excellent";
+            efficiencyScore = 95;
+        } else if (sim.carsPassed > 40) {
+            efficiency = "Very Good";
+            efficiencyScore = 80;
+        } else if (sim.carsPassed > 25) {
+            efficiency = "Good";
+            efficiencyScore = 65;
+        } else if (sim.carsPassed > 10) {
+            efficiency = "Moderate";
+            efficiencyScore = 45;
+        }
+
+        const queueLength = sim.cars.filter((car) => !car.passed && car.progress <= 0).length;
+        const queueByRoad = Object.fromEntries(
+            sim.roads.map((road) => [road, sim.cars.filter((car) => car.road === road && !car.passed && car.progress <= 0).length])
+        );
+        const elapsedTime = sim.startTimeSec ? Math.max(0, nowSec() - sim.startTimeSec) : 0;
+        const throughput = elapsedTime > 0 ? (sim.carsPassed / elapsedTime) * 60 : 0;
+        const averageWait = sim.waitSamples ? sim.totalWaitTime / sim.waitSamples : 0;
+        const phaseText = activeRoads.join(" + ");
+        const blockedText = inactiveRoads.join(" + ");
+
+        return {
+            cars: sim.cars.map((car) => ({
+                id: car.id,
+                road: car.road,
+                progress: car.progress,
+                passed: car.passed,
+                color: car.color,
+            })),
+            cars_passed: sim.carsPassed,
+            queue_length: queueLength,
+            queue_by_road: queueByRoad,
+            current_phase: phase,
+            active_roads: activeRoads,
+            inactive_roads: inactiveRoads,
+            remaining_time: Math.floor(remaining),
+            phase_duration: duration,
+            density: { ...sim.density },
+            conflicts: sim.conflicts.map((edge) => [...edge]),
+            phase_groups: Object.fromEntries(sim.phaseKeys.map((key) => [String(key), [...sim.phases[key]]])),
+            phase_explanation: `${phaseText} are green because they share one graph-coloring phase. ${blockedText} stay red because they conflict with at least one active road.`,
+            priority_road: sim.priorityRoad,
+            priority_message: sim.priorityMessage,
+            mode: sim.mode,
+            mode_label: CLIENT_MODES[sim.mode],
+            mode_intensity: CLIENT_MODE_INTENSITY[sim.mode],
+            modes: { ...CLIENT_MODES },
+            scenarios: Object.fromEntries(Object.entries(CLIENT_SCENARIOS).map(([key, value]) => [key, value.label])),
+            active_scenario: sim.activeScenario,
+            scenario_description: sim.activeScenario
+                ? sim.activeScenario === "event_dispersal" && sim.scenarioFocusRoad
+                    ? `${CLIENT_SCENARIOS[sim.activeScenario].description} Current focus: ${sim.scenarioFocusRoad}.`
+                    : CLIENT_SCENARIOS[sim.activeScenario].description
+                : "Pick a preset to simulate a real-world traffic pattern.",
+            running: sim.running,
+            efficiency,
+            efficiency_score: efficiencyScore,
+            elapsed_time: Number(elapsedTime.toFixed(1)),
+            throughput: Number(throughput.toFixed(1)),
+            average_wait: Number(averageWait.toFixed(1)),
+        };
+    }
+
+    return {
+        reset(mode = sim.mode) {
+            if (CLIENT_MODES[mode]) sim.mode = mode;
+            sim.cars = [];
+            sim.carsPassed = 0;
+            sim.spawnTimer = 0;
+            sim.density = makeDensity(sim.mode);
+            sim.currentPhaseIndex = 0;
+            sim.lastSwitchSec = nowSec();
+            sim.running = false;
+            sim.carIdCounter = 0;
+            sim.startTimeSec = null;
+            sim.pausedRemainingSec = null;
+            sim.priorityRoad = null;
+            sim.priorityMessage = "No priority active";
+            sim.activeScenario = null;
+            sim.scenarioFocusRoad = null;
+            sim.totalWaitTime = 0;
+            sim.waitSamples = 0;
+            sim.tickAccumulatorMs = 0;
+        },
+        start() {
+            if (sim.running) return;
+            sim.running = true;
+            const now = nowSec();
+            if (sim.pausedRemainingSec != null) {
+                sim.lastSwitchSec = now - Math.max(0, phaseDuration() - sim.pausedRemainingSec);
+                sim.pausedRemainingSec = null;
+            } else {
+                sim.lastSwitchSec = now;
+            }
+            if (sim.startTimeSec == null) sim.startTimeSec = sim.lastSwitchSec;
+        },
+        stop() {
+            if (sim.running) {
+                sim.pausedRemainingSec = Math.max(0, phaseDuration() - (nowSec() - sim.lastSwitchSec));
+            }
+            sim.running = false;
+        },
+        setMode(mode) {
+            if (!CLIENT_MODES[mode]) return;
+            sim.mode = mode;
+            sim.density = makeDensity(mode);
+            prefillModeTraffic();
+            sim.priorityRoad = null;
+            sim.priorityMessage = `${CLIENT_MODES[mode]} mode active`;
+            sim.activeScenario = null;
+            sim.scenarioFocusRoad = null;
+            sim.lastSwitchSec = nowSec();
+            sim.pausedRemainingSec = null;
+        },
+        setDensity(road, value) {
+            if (!sim.roads.includes(road)) return;
+            sim.density[road] = clamp(value, CLIENT_MIN_DENSITY, CLIENT_MAX_DENSITY);
+        },
+        prioritize(road) {
+            if (!sim.roads.includes(road)) return;
+            const index = sim.phaseKeys.findIndex((key) => sim.phases[key].includes(road));
+            if (index >= 0) {
+                sim.currentPhaseIndex = index;
+                sim.lastSwitchSec = nowSec();
+                sim.pausedRemainingSec = null;
+                sim.priorityRoad = road;
+                sim.priorityMessage = `${road} priority active`;
+            }
+        },
+        applyScenario(scenarioKey) {
+            const scenario = CLIENT_SCENARIOS[scenarioKey];
+            if (!scenario) return;
+            sim.mode = scenario.mode;
+            sim.density = Object.fromEntries(
+                sim.roads.map((road) => [road, clamp(scenario.density[road], CLIENT_MIN_DENSITY, CLIENT_MAX_DENSITY)])
+            );
+            sim.scenarioFocusRoad = null;
+            if (scenarioKey === "event_dispersal") {
+                sim.scenarioFocusRoad = sim.roads[randomInt(0, sim.roads.length - 1)];
+                sim.density[sim.scenarioFocusRoad] = clamp(
+                    sim.density[sim.scenarioFocusRoad] + (scenario.focus_boost || 0),
+                    CLIENT_MIN_DENSITY,
+                    CLIENT_MAX_DENSITY
+                );
+            }
+            prefillModeTraffic();
+            sim.priorityRoad = null;
+            sim.priorityMessage = `Scenario active: ${scenario.label}`;
+            sim.activeScenario = scenarioKey;
+            sim.lastSwitchSec = nowSec();
+            sim.pausedRemainingSec = null;
+        },
+        step(dtSeconds) {
+            sim.tickAccumulatorMs += dtSeconds * 1000;
+            while (sim.tickAccumulatorMs >= CLIENT_TICK_MS) {
+                stepTick();
+                sim.tickAccumulatorMs -= CLIENT_TICK_MS;
+            }
+        },
+        state() {
+            return getStateSnapshot();
+        },
+    };
+}
 
 function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
@@ -349,6 +755,11 @@ function animationLoop(ts) {
     if (!lastFrameTs) lastFrameTs = ts;
     const dt = Math.min(0.05, (ts - lastFrameTs) / 1000);
     lastFrameTs = ts;
+    if (USE_CLIENT_SIM && clientSim) {
+        clientSim.step(dt);
+        state = clientSim.state();
+        mergeCarsFromState();
+    }
 
     const hasCars = visualCars.length > 0;
     const activeAnimation = state.running || hasCars;
@@ -466,9 +877,16 @@ function renderModeIntensity() {
 }
 
 async function update() {
+    if (USE_CLIENT_SIM && clientSim) {
+        state = clientSim.state();
+        mergeCarsFromState();
+    }
     if (stateRequestInFlight) {
         return;
     }
+    if (USE_CLIENT_SIM) {
+        stateRequestInFlight = false;
+    } else {
     stateRequestInFlight = true;
     try {
         const res = await fetch("/api/state", { cache: "no-store" });
@@ -479,6 +897,7 @@ async function update() {
     }
     stateRequestInFlight = false;
     mergeCarsFromState();
+    }
 
     setText("phase", state.current_phase || "-");
     setText("sig", `${state.remaining_time ?? "-"}s`);
@@ -530,6 +949,22 @@ async function update() {
 }
 
 async function callApi(path) {
+    if (USE_CLIENT_SIM && clientSim) {
+        if (path === "/api/start") clientSim.start();
+        else if (path === "/api/stop") clientSim.stop();
+        else if (path === "/api/reset") clientSim.reset();
+        else if (path.startsWith("/api/mode/")) clientSim.setMode(path.replace("/api/mode/", ""));
+        else if (path.startsWith("/api/priority/")) clientSim.prioritize(path.replace("/api/priority/", ""));
+        else if (path.startsWith("/api/scenario/")) clientSim.applyScenario(path.replace("/api/scenario/", ""));
+        else if (path.startsWith("/api/density/")) {
+            const parts = path.split("/");
+            const road = parts[3];
+            const value = Number(parts[4]);
+            clientSim.setDensity(road, value);
+        }
+        await update();
+        return;
+    }
     await fetch(path);
     await update();
 }
@@ -597,6 +1032,10 @@ async function pollLoop() {
 function startPolling() {
     if (pollingStarted) return;
     pollingStarted = true;
+    if (USE_CLIENT_SIM && clientSim) {
+        state = clientSim.state();
+        mergeCarsFromState();
+    }
     pollLoop();
 }
 
