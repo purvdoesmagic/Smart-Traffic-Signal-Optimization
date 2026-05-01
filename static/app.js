@@ -444,7 +444,7 @@ function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
     const nextWidth = Math.max(320, Math.floor(rect.width));
     const nextHeight = Math.max(420, Math.floor(rect.height));
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     if (nextWidth !== sceneWidth || nextHeight !== sceneHeight || dpr !== sceneDpr) {
         sceneWidth = nextWidth;
         sceneHeight = nextHeight;
@@ -460,7 +460,7 @@ function resizeTrendCanvas() {
     if (!wrap) return;
     const nextWidth = Math.max(220, Math.floor(wrap.clientWidth - 16));
     const nextHeight = Math.max(80, Math.floor(wrap.clientHeight - 16));
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     if (trendCanvas.width !== Math.floor(nextWidth * dpr) || trendCanvas.height !== Math.floor(nextHeight * dpr) || dpr !== trendDpr) {
         trendDpr = dpr;
         trendCanvas.width = Math.floor(nextWidth * trendDpr);
@@ -474,7 +474,7 @@ function resizeGraphCanvas() {
     if (!wrap) return;
     const nextWidth = Math.max(220, Math.floor(wrap.clientWidth - 16));
     const nextHeight = Math.max(120, Math.floor(wrap.clientHeight - 16));
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     if (
         graphCanvas.width !== Math.floor(nextWidth * dpr) ||
         graphCanvas.height !== Math.floor(nextHeight * dpr) ||
@@ -969,9 +969,9 @@ async function callApi(path) {
     await update();
 }
 
-async function start() { await callApi("/api/start"); }
-async function stop() { await callApi("/api/stop"); }
-async function reset() { await callApi("/api/reset"); }
+async function startSimulation() { await callApi("/api/start"); }
+async function stopSimulation() { await callApi("/api/stop"); }
+async function resetSimulation() { await callApi("/api/reset"); }
 
 document.addEventListener("click", (event) => {
     const aboutToggle = event.target.dataset.aboutToggle;
@@ -1046,5 +1046,8 @@ function startAnimation() {
 }
 
 resizeCanvas();
+document.getElementById("s")?.addEventListener("click", startSimulation);
+document.getElementById("t")?.addEventListener("click", stopSimulation);
+document.getElementById("r")?.addEventListener("click", resetSimulation);
 startPolling();
 startAnimation();
