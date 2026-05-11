@@ -59,7 +59,7 @@ The app includes:
 ## Project Structure
 
 - `app.py` - Flask backend and simulation engine
-- `IA2_DM.py` - local launcher
+- `code.py` - local launcher
 - `templates/index.html` - UI layout
 - `static/styles.css` - UI styling
 - `static/app.js` - rendering and client-side logic
@@ -77,7 +77,7 @@ pip install -r requirements.txt
 3. Start the app:
 
 ```bash
-python IA2_DM.py
+python code.py
 ```
 
 4. Open:
